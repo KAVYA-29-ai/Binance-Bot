@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Binance Futures Bot — Testnet</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+</head>
+<body>
+
+  <!-- ── Header ───────────────────────────────────────────────────── -->
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">Binance Futures <span class="badge">TESTNET</span></span>
+      </div>
+      <div class="header-right">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusLabel" class="status-label">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main layout ──────────────────────────────────────────────── -->
+  <main class="container">
+
+    <!-- ── Left: Order Form ──────────────────────────────────── -->
+    <section class="card order-card">
+      <h2 class="card-title">Place Order</h2>
+
+      <div class="form-group">
+        <label for="symbol">Symbol</label>
+        <div class="input-row">
+          <input id="symbol" type="text" placeholder="BTCUSDT" value="BTCUSDT" autocomplete="off" />
+          <button class="btn btn-ghost" onclick="fetchPrice()">Get Price</button>
+        </div>
+        <div class="price-display" id="priceDisplay"></div>
+      </div>
+
+      <div class="form-row">
+        <!-- Side -->
+        <div class="form-group half">
+          <label>Side</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active buy" id="sideBuy" onclick="setSide('BUY')">BUY</button>
+            <button class="toggle-btn sell" id="sideSell" onclick="setSide('SELL')">SELL</button>
+          </div>
+        </div>
+
+        <!-- Order Type -->
+        <div class="form-group half">
+          <label for="orderType">Order Type</label>
+          <select id="orderType" onchange="handleTypeChange()">
+            <option value="MARKET">MARKET</option>
+            <option value="LIMIT">LIMIT</option>
+            <option value="STOP_LIMIT">STOP LIMIT</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="quantity">Quantity</label>
+        <input id="quantity" type="number" step="0.001" min="0.001" placeholder="0.01" />
+      </div>
+
+      <div class="form-group" id="priceGroup" style="display:none">
+        <label for="price">Limit Price (USDT)</label>
+        <input id="price" type="number" step="0.01" min="0" placeholder="e.g. 50000" />
+      </div>
+
+      <div class="form-group" id="stopPriceGroup" style="display:none">
+        <label for="stopPrice">Stop Price (USDT)</label>
+        <input id="stopPrice" type="number" step="0.01" min="0" placeholder="e.g. 49500" />
+      </div>
+
+      <!-- Order Summary Preview -->
+      <div class="order-preview" id="orderPreview" style="display:none">
+        <div class="preview-title">📋 Order Preview</div>
+        <div class="preview-grid" id="previewGrid"></div>
+      </div>
+
+      <button class="btn btn-primary" id="placeBtn" onclick="placeOrder()">
+        Place Order
+      </button>
+
+      <!-- Result Message -->
+      <div class="result-box" id="resultBox" style="display:none"></div>
+    </section>
+
+    <!-- ── Right: Response + Open Orders ─────────────────────── -->
+    <aside class="right-panel">
+
+      <!-- Last Order Response -->
+      <div class="card response-card">
+        <h2 class="card-title">Last Order Response</h2>
+        <div id="responseArea" class="response-area empty">
+          <span class="empty-msg">No orders placed yet.</span>
+        </div>
+      </div>
+
+      <!-- Open Orders -->
+      <div class="card open-orders-card">
+        <div class="card-title-row">
+          <h2 class="card-title">Open Orders</h2>
+          <button class="btn btn-ghost btn-sm" onclick="fetchOpenOrders()">Refresh</button>
+        </div>
+        <div id="openOrdersArea" class="open-orders-area empty">
+          <span class="empty-msg">Click Refresh to load.</span>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────────── -->
+  <footer>
+    <span>⚠️ This bot operates on <strong>Binance Futures Testnet</strong> — no real funds at risk.</span>
+  </footer>
+
+  <script>
+    // ── State ─────────────────────────────────────────────────────────────────
+    let selectedSide = 'BUY';
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      checkHealth();
+      setInterval(checkHealth, 30000);
+      ['symbol','quantity','price','stopPrice','orderType'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', updatePreview);
+        if (el) el.addEventListener('change', updatePreview);
+      });
+    });
+
+    // ── Health check ──────────────────────────────────────────────────────────
+    async function checkHealth() {
+      const dot = document.getElementById('statusDot');
+      const label = document.getElementById('statusLabel');
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+        if (data.api_connected) {
+          dot.className = 'status-dot online';
+          label.textContent = 'Connected';
+        } else {
+          dot.className = 'status-dot error';
+          label.textContent = 'API Key Missing';
+        }
+      } catch {
+        dot.className = 'status-dot error';
+        label.textContent = 'Offline';
+      }
+    }
+
+    // ── Side toggle ───────────────────────────────────────────────────────────
+    function setSide(side) {
+      selectedSide = side;
+      document.getElementById('sideBuy').classList.toggle('active', side === 'BUY');
+      document.getElementById('sideSell').classList.toggle('active', side === 'SELL');
+      const btn = document.getElementById('placeBtn');
+      btn.className = side === 'BUY' ? 'btn btn-primary buy-btn' : 'btn btn-primary sell-btn';
+      btn.textContent = 'Place ' + side + ' Order';
+      updatePreview();
+    }
+
+    // ── Order type change ─────────────────────────────────────────────────────
+    function handleTypeChange() {
+      const type = document.getElementById('orderType').value;
+      document.getElementById('priceGroup').style.display =
+        (type === 'LIMIT' || type === 'STOP_LIMIT') ? 'block' : 'none';
+      document.getElementById('stopPriceGroup').style.display =
+        type === 'STOP_LIMIT' ? 'block' : 'none';
+      updatePreview();
+    }
+
+    // ── Live preview ──────────────────────────────────────────────────────────
+    function updatePreview() {
+      const symbol   = document.getElementById('symbol').value.trim().toUpperCase();
+      const type     = document.getElementById('orderType').value;
+      const quantity = document.getElementById('quantity').value;
+      const price    = document.getElementById('price').value;
+      const stop     = document.getElementById('stopPrice').value;
+
+      if (!symbol || !quantity) {
+        document.getElementById('orderPreview').style.display = 'none';
+        return;
+      }
+
+      const rows = [
+        ['Symbol', symbol],
+        ['Side', selectedSide],
+        ['Type', type],
+        ['Quantity', quantity],
+      ];
+      if (price && (type === 'LIMIT' || type === 'STOP_LIMIT')) rows.push(['Price', `${price} USDT`]);
+      if (stop && type === 'STOP_LIMIT') rows.push(['Stop Price', `${stop} USDT`]);
+
+      document.getElementById('previewGrid').innerHTML = rows.map(([k,v]) =>
+        `<div class="preview-row"><span class="pkey">${k}</span><span class="pval">${v}</span></div>`
+      ).join('');
+      document.getElementById('orderPreview').style.display = 'block';
+    }
+
+    // ── Fetch price ───────────────────────────────────────────────────────────
+    async function fetchPrice() {
+      const symbol = document.getElementById('symbol').value.trim().toUpperCase();
+      if (!symbol) return showResult('Enter a symbol first.', false);
+      const display = document.getElementById('priceDisplay');
+      display.textContent = 'Fetching…';
+      try {
+        const res  = await fetch(`/price/${symbol}`);
+        const data = await res.json();
+        if (data.price) {
+          display.innerHTML = `<span class="price-tag">💰 ${symbol}: <strong>${Number(data.price).toLocaleString()} USDT</strong></span>`;
+        } else {
+          display.textContent = data.error || 'Error fetching price.';
+        }
+      } catch {
+        display.textContent = 'Network error.';
+      }
+    }
+
+    // ── Place order ───────────────────────────────────────────────────────────
+    async function placeOrder() {
+      const btn = document.getElementById('placeBtn');
+      btn.disabled = true;
+      btn.textContent = 'Placing…';
+
+      const payload = {
+        symbol:     document.getElementById('symbol').value.trim(),
+        side:       selectedSide,
+        order_type: document.getElementById('orderType').value,
+        quantity:   document.getElementById('quantity').value,
+        price:      document.getElementById('price').value || '',
+        stop_price: document.getElementById('stopPrice').value || '',
+      };
+
+      try {
+        const res  = await fetch('/place_order', {
+          method:  'POST',
+          headers: {'Content-Type': 'application/json'},
+          body:    JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showResult('✅ Order placed successfully!', true);
+          renderOrderResponse(data.order);
+          fetchOpenOrders();
+        } else {
+          showResult(`❌ ${data.error}`, false);
+        }
+      } catch (err) {
+        showResult('❌ Network error. Check that the Flask server is running.', false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = `Place ${selectedSide} Order`;
+      }
+    }
+
+    // ── Render last order response ────────────────────────────────────────────
+    function renderOrderResponse(order) {
+      const area = document.getElementById('responseArea');
+      area.className = 'response-area';
+      const fields = [
+        ['Order ID',     order.orderId],
+        ['Symbol',       order.symbol],
+        ['Side',         order.side],
+        ['Type',         order.type],
+        ['Quantity',     order.origQty],
+        ['Executed Qty', order.executedQty],
+        ['Avg Price',    order.avgPrice || 'N/A'],
+        ['Status',       order.status],
+      ];
+      area.innerHTML = fields.map(([k,v]) =>
+        `<div class="resp-row">
+           <span class="resp-key">${k}</span>
+           <span class="resp-val ${k==='Status' ? 'status-badge ' + v : ''}">${v}</span>
+         </div>`
+      ).join('');
+    }
+
+    // ── Fetch open orders ─────────────────────────────────────────────────────
+    async function fetchOpenOrders() {
+      const symbol = document.getElementById('symbol').value.trim().toUpperCase();
+      const area   = document.getElementById('openOrdersArea');
+      area.innerHTML = '<span class="empty-msg">Loading…</span>';
+      try {
+        const res  = await fetch(`/open_orders?symbol=${symbol}`);
+        const data = await res.json();
+        if (!data.orders || data.orders.length === 0) {
+          area.className = 'open-orders-area empty';
+          area.innerHTML = '<span class="empty-msg">No open orders.</span>';
+        } else {
+          area.className = 'open-orders-area';
+          area.innerHTML = data.orders.map(o =>
+            `<div class="order-chip">
+               <span class="chip-side ${o.side}">${o.side}</span>
+               <span>${o.symbol}</span>
+               <span class="chip-type">${o.type}</span>
+               <span>qty: ${o.origQty}</span>
+               <span class="chip-price">${Number(o.price).toLocaleString()} USDT</span>
+             </div>`
+          ).join('');
+        }
+      } catch {
+        area.innerHTML = '<span class="empty-msg">Error fetching orders.</span>';
+      }
+    }
+
+    // ── Show result banner ────────────────────────────────────────────────────
+    function showResult(msg, success) {
+      const box = document.getElementById('resultBox');
+      box.textContent = msg;
+      box.className = 'result-box ' + (success ? 'success' : 'error');
+      box.style.display = 'block';
+      setTimeout(() => { box.style.display = 'none'; }, 6000);
+    }
+
+    // Initialise button text
+    setSide('BUY');
+  </script>
+</body>
+</html>
