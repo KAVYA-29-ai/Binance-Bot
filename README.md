@@ -1,6 +1,6 @@
 # ⚡ Binance Futures Trading Bot (Testnet)
 
-![CI](https://github.com/YOUR_USERNAME/trading-bot/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/KAVYA-29-ai/trading-bot/actions/workflows/ci.yml/badge.svg)
 
 A clean, production-structured Python trading bot for the **Binance USDT-M Futures Testnet**.
 Supports **Market**, **Limit**, and **Stop-Limit** orders via a **CLI**, **Interactive Menu**, and **Web UI**.
@@ -227,5 +227,5 @@ Sample entries:
 
 Built for the **Python Developer (Trading Bot)** internship task.
 
-Submitted by: `[Your Name]`
-GitHub: `[Your GitHub URL]`
+Submitted by: `kavya`
+GitHub: `KAVYA-29-ai`
